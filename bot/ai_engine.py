@@ -7,6 +7,7 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+
 def understand_message(text: str) -> dict:
     prompt = f"""
 You are a helpful assistant for Nigerian market traders.
@@ -14,56 +15,65 @@ The user may write in English, Pidgin English, Yoruba, Hausa, Igbo or any mix.
 
 Message: "{text}"
 
-Your job is to understand the MEANING and return ONLY a JSON object.
+Return ONLY a JSON object. No explanation.
 
-INTENT RULES:
-- record_sale: user sold something and got paid immediately
-- add_debt: user gave goods/services but customer has NOT paid yet (will pay later)
-- record_payment: a customer is paying back money they previously owed
-- view_debts: user wants to see everyone who owes them
-- view_customer_debt: user wants to see what one specific person owes
-- view_daily: user asking about today's business
-- view_weekly: user asking about this week
-- view_monthly: user asking about this month
-- view_summary: general business summary
-- clear_records: user wants to start fresh / new stock
-- greeting: hello, hi, how are you etc
+INTENT OPTIONS:
+- record_sale: sold something and got paid immediately
+- add_stock: adding new or old stock/inventory
+- view_stock: check current stock levels
+- add_debt: gave goods on credit, customer hasn't paid
+- record_payment: customer paying back debt
+- view_debts: see all debtors
+- view_customer_debt: check one customer's debt
+- view_daily: today's summary
+- view_yesterday: yesterday's summary  
+- view_weekly: this week
+- view_monthly: this month
+- view_last_n_days: last N days (extract n)
+- view_date_range: specific date range (extract start and end dates)
+- view_weekend: weekend sales
+- view_top_products: best selling products + ROI
+- view_top_customers: best customers by purchases
+- view_chart: show sales chart
+- clear_records: archive old records, start fresh
+- greeting: hello etc
 - unknown: cannot understand
 
-KEY PATTERNS TO RECOGNIZE (regardless of name or item):
-- "[name] take/collect/carry [item/amount], go pay [time]" = add_debt
-- "[name] owe me [amount]" = add_debt
-- "[name] don pay / [name] pay me [amount]" = record_payment
-- "I sell [item] [price], I buy am [cost]" = record_sale
-- "who owe me / my debtors / people wey owe me" = view_debts
-- "how much [name] owe" = view_customer_debt
-- "my profit today / wetin I make today" = view_daily
-- "this week / weekly" = view_weekly
-- "this month / monthly" = view_monthly
-- "clear / start fresh / don finish goods / new stock" = clear_records
+KEY PATTERNS:
+- "last 3 days / last 5 days" = view_last_n_days, n=3 or 5
+- "from [date] to [date]" = view_date_range
+- "weekend sales" = view_weekend
+- "top products / best sellers" = view_top_products
+- "top customers / best customers" = view_top_customers
+- "show chart / sales chart" = view_chart
+- "add stock / I buy [item] [qty] [price]" = add_stock
+- "show stock / my stock" = view_stock
+- "yesterday sales" = view_yesterday
 
-Return ONLY this JSON structure:
+JSON STRUCTURE:
 {{
   "intent": "<intent>",
   "items": [
     {{
-      "item": "<item name or 'goods' if unknown>",
+      "item": "<name>",
       "quantity": <number or 1>,
-      "amount": <total amount or price per unit as number, convert k to thousands e.g. 45k=45000>,
-      "cost_price": <cost price as number or null>
+      "amount": <selling price per unit, convert k to thousands>,
+      "cost_price": <cost per unit or null>
     }}
   ],
-  "customer_name": "<full name mentioned or null>",
+  "customer_name": "<name or null>",
   "amount": <payment amount as number or null>,
-  "due_date": "<when they will pay or null>",
-  "notes": null
+  "due_date": "<due date or null>",
+  "n_days": <number of days or null>,
+  "start_date": "<YYYY-MM-DD or null>",
+  "end_date": "<YYYY-MM-DD or null>",
+  "chart_days": <number of days for chart, default 7>
 }}
 
 IMPORTANT:
-- Convert 45k to 45000, 1.5k to 1500, 200k to 200000
-- If no cost price mentioned, set cost_price to null
-- Extract ANY name mentioned as customer_name
-- Only return JSON, no explanation
+- Convert 45k=45000, 1.5k=1500, 200k=200000
+- Extract ANY name as customer_name
+- Only return JSON
 """
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
