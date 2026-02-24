@@ -105,7 +105,8 @@ def handle_message(phone: str, text: str):
             reply_lines.append(f"👤 Customer: {customer}")
         reply_lines.append("Keep it up! 💪")
         send_whatsapp_message(phone, "\n".join(reply_lines))
-
+        return
+    
     # ─── ADD STOCK ───────────────────────────────────────
     elif intent == "add_stock":
         items = parsed.get("items", [])
