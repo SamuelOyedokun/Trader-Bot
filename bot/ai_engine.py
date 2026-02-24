@@ -18,10 +18,10 @@ Message: "{text}"
 Return ONLY a JSON object. No explanation.
 
 INTENT OPTIONS:
-- record_sale: sold something and got paid immediately
+- record_sale: sold something. ALWAYS record_sale if BOTH selling price AND cost price are mentioned, even if a customer name is included. "I sell X to [name], I buy am Y" = record_sale NOT add_debt
 - add_stock: adding new or old stock/inventory
 - view_stock: check current stock levels
-- add_debt: gave goods on credit, customer hasn't paid
+- add_debt: gave goods on credit with NO payment yet. Only use this if there is NO cost price mentioned and customer will pay LATER
 - record_payment: customer paying back debt
 - view_debts: see all debtors
 - view_customer_debt: check one customer's debt
