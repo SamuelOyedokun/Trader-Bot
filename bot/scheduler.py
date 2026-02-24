@@ -4,6 +4,36 @@ from bot.db import get_weekly_summary, supabase
 from bot.message_handler import send_whatsapp_message
 import pytz
 import logging
+from bot.subscription import get_expiry_warning
+from datetime import datetime, timedelta
+
+def send_expiry_reminders():
+    """Send reminders to users whose subscription expires in 3 days."""
+    logger.info("🔔 Running expiry reminder job...")
+    try:
+        # Find subscriptions expiring in 3 days
+        three_days_from_now = datetime.utcnow() + timedelta(days=3)
+        two_days_from_now = datetime.utcnow() + timedelta(days=2)
+
+        result = supabase.table("subscriptions")\
+            .select("*")\
+            .eq("status", "active")\
+            .gte("subscription_end", two_days_from_now.isoformat())\
+            .lte("subscription_end", three_days_from_now.isoformat())\
+            .execute()
+
+        for sub in result.data:
+            phone = sub["phone"]
+            sub_end = datetime.fromisoformat(sub["subscription_end"].replace("Z", "+00:00")).replace(tzinfo=None)
+            days_left = (sub_end - datetime.utcnow()).days
+            try:
+                send_whatsapp_message(phone, get_expiry_warning(days_left))
+                logger.info(f"✅ Reminder sent to {phone}")
+            except Exception as e:
+                logger.error(f"❌ Failed reminder for {phone}: {e}")
+
+    except Exception as e:
+        logger.error(f"Expiry reminder error: {e}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -79,6 +109,19 @@ def start_scheduler():
         ),
         id="weekly_summary",
         name="Weekly Summary to All Users",
+        replace_existing=True
+    )
+    
+    # Every day at 9AM Nigeria time — check expiring subscriptions
+    scheduler.add_job(
+        send_expiry_reminders,
+        trigger=CronTrigger(
+            hour=9,
+            minute=0,
+            timezone=nigeria_tz
+        ),
+        id="expiry_reminders",
+        name="Subscription Expiry Reminders",
         replace_existing=True
     )
 

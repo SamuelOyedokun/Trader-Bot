@@ -14,6 +14,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from bot.subscription import check_access, get_payment_message, get_expiry_warning, activate_subscription, MONTHLY_PRICE
 
 load_dotenv()
 
@@ -55,6 +56,39 @@ def format_summary(title, summary):
 
 def handle_message(phone: str, text: str):
     if not text:
+        return
+    
+    # ─── SUBSCRIPTION CHECK ──────────────────────────────
+    has_access, status, days_left = check_access(phone)
+
+    # Welcome new users
+    if status == "new":
+        send_whatsapp_message(phone,
+            f"👋 Welcome to TraderBot!\n\n"
+            f"You have *{days_left} days free trial* — no payment needed yet.\n\n"
+            f"Here's what I can do:\n"
+            f"📦 Record your sales\n"
+            f"🏪 Track your stock\n"
+            f"📝 Manage customer debts\n"
+            f"📊 Daily, weekly, monthly summaries\n"
+            f"🏆 Top products + ROI analysis\n"
+            f"🏷️ Multiple business sections\n\n"
+            f"Just tell me what you sold today to get started! 😊"
+        )
+        return
+
+    # Warn trial users with 2 or fewer days left
+    if status == "trial" and days_left <= 2:
+        send_whatsapp_message(phone,
+            f"⚠️ Your free trial ends in *{days_left} day{'s' if days_left != 1 else ''}*!\n\n"
+            f"Subscribe now to keep your data and never lose access.\n\n"
+            f"Reply *'subscribe'* to see payment options."
+        )
+        # Still allow access during trial
+
+    # Block expired users
+    if not has_access:
+        send_whatsapp_message(phone, get_payment_message(phone))
         return
 
     parsed = understand_message(text)
@@ -437,6 +471,19 @@ def handle_message(phone: str, text: str):
             "• 'hello'\n"
             "• 'my profit today'"
         )
+
+    # ─── SUBSCRIBE ───────────────────────────────────────
+    elif intent == "subscribe" or text.lower().strip() in ["subscribe", "i have paid", "i don pay", "i pay"]:
+        if text.lower().strip() in ["i have paid", "i don pay", "i pay"]:
+            # Manual payment confirmation — you verify and activate
+            send_whatsapp_message(phone,
+                "✅ Thank you! Your payment is being verified.\n\n"
+                "We will activate your account within a few minutes.\n\n"
+                "If you're not activated within 10 minutes, "
+                "send your payment receipt to this number."
+            )
+        else:
+            send_whatsapp_message(phone, get_payment_message(phone))    
 
     # ─── GREETING ────────────────────────────────────────
     elif intent == "greeting":
