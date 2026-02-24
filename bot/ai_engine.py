@@ -37,6 +37,10 @@ INTENT OPTIONS:
 - view_chart: show sales chart
 - clear_records: archive old records, start fresh
 - greeting: hello etc
+- switch_section: user wants to change active business section e.g. "switch to drinks", "go to food section", "change to clothes"
+- view_section_summary: user wants summary of a specific section e.g. "food summary", "drinks profit"
+- view_all_sections: user wants to compare all sections together e.g. "show all sections", "compare all my businesses"
+- view_section_stock: user wants stock for a specific section
 - unknown: cannot understand
 
 KEY PATTERNS:
@@ -49,6 +53,9 @@ KEY PATTERNS:
 - "add stock / I buy [item] [qty] [price]" = add_stock
 - "show stock / my stock" = view_stock
 - "yesterday sales" = view_yesterday
+- "switch to [section] / go to [section] / change to [section]" = switch_section
+- "[section] summary / [section] profit / [section] sales" = view_section_summary
+- "all sections / compare sections / all businesses" = view_all_sections
 
 JSON STRUCTURE:
 {{
@@ -67,6 +74,7 @@ JSON STRUCTURE:
   "n_days": <number of days or null>,
   "start_date": "<YYYY-MM-DD or null>",
   "end_date": "<YYYY-MM-DD or null>",
+  "section": "<section name mentioned or null>",
   "chart_days": <number of days for chart, default 7>
 }}
 

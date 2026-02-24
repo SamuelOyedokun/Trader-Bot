@@ -5,7 +5,9 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     get_top_products, get_top_customers,
                     archive_records, save_debt, get_all_debts,
                     get_customer_debt, record_payment,
-                    add_stock, get_all_stock)
+                    add_stock, get_all_stock,
+                    get_current_section, set_current_section,
+                    get_all_sections_summary, get_section_summary)
 from bot.charts import generate_sales_chart, generate_top_products_chart
 from twilio.rest import Client
 import os
@@ -30,16 +32,10 @@ def send_whatsapp_message(phone: str, message: str):
 
 
 def send_whatsapp_image(phone: str, image_buf, caption: str):
-    """Save chart to temp file and send via Twilio."""
     try:
-        client = get_twilio_client()
-        # Save to temp file
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             tmp.write(image_buf.read())
             tmp_path = tmp.name
-
-        # For Twilio sandbox, images need a public URL
-        # We'll send the text summary instead and note chart was generated
         send_whatsapp_message(phone, caption)
         os.unlink(tmp_path)
     except Exception as e:
@@ -64,6 +60,10 @@ def handle_message(phone: str, text: str):
     parsed = understand_message(text)
     intent = parsed.get("intent")
 
+    # Get active section for every message
+    mentioned_section = parsed.get("section")
+    active_section = mentioned_section if mentioned_section else get_current_section(phone)
+
     # ─── RECORD SALE ─────────────────────────────────────
     if intent == "record_sale":
         items = parsed.get("items", [])
@@ -74,7 +74,7 @@ def handle_message(phone: str, text: str):
             )
             return
 
-        reply_lines = ["✅ Sales recorded!\n"]
+        reply_lines = [f"✅ Sales recorded! [{active_section.upper()}]\n"]
         total_profit = 0
         missing_cost = []
         customer = parsed.get("customer_name")
@@ -88,14 +88,14 @@ def handle_message(phone: str, text: str):
             if amount and cost:
                 profit = (amount - cost) * qty
                 total_profit += profit
-                save_sale(phone, item, qty, amount, cost, profit, customer)
+                save_sale(phone, item, qty, amount, cost, profit, customer, active_section)
                 reply_lines.append(
                     f"📦 {item} × {qty}\n"
                     f"   Sell: ₦{amount:,.0f} | Cost: ₦{cost:,.0f} | Profit: ₦{profit:,.0f}"
                 )
             elif amount and not cost:
                 missing_cost.append(item)
-                save_sale(phone, item, qty, amount, 0, 0, customer)
+                save_sale(phone, item, qty, amount, 0, 0, customer, active_section)
                 reply_lines.append(f"📦 {item} × {qty} — ₦{amount:,.0f} (no cost price)")
 
         reply_lines.append(f"\n💰 Total Profit: ₦{total_profit:,.0f}")
@@ -105,8 +105,7 @@ def handle_message(phone: str, text: str):
             reply_lines.append(f"👤 Customer: {customer}")
         reply_lines.append("Keep it up! 💪")
         send_whatsapp_message(phone, "\n".join(reply_lines))
-        return
-    
+
     # ─── ADD STOCK ───────────────────────────────────────
     elif intent == "add_stock":
         items = parsed.get("items", [])
@@ -117,40 +116,34 @@ def handle_message(phone: str, text: str):
             )
             return
 
-        reply_lines = ["📦 Stock added!\n"]
+        reply_lines = [f"📦 Stock added! [{active_section.upper()}]\n"]
         for item_data in items:
             item = item_data.get("item", "item")
             qty = item_data.get("quantity", 1) or 1
             cost = item_data.get("cost_price") or item_data.get("amount")
             if not cost:
                 cost = 0
-
-            add_stock(phone, item, qty, cost)
-            reply_lines.append(
-                f"✅ {item}: +{qty} units @ ₦{cost:,.0f} each"
-            )
+            add_stock(phone, item, qty, cost, active_section)
+            reply_lines.append(f"✅ {item}: +{qty} units @ ₦{cost:,.0f} each")
 
         reply_lines.append("\nStock updated successfully! 🏪")
         send_whatsapp_message(phone, "\n".join(reply_lines))
 
     # ─── VIEW STOCK ──────────────────────────────────────
     elif intent == "view_stock":
-        stock = get_all_stock(phone)
+        stock = get_all_stock(phone, active_section)
         if not stock:
             send_whatsapp_message(phone,
-                "No stock records yet.\n\n"
+                f"No stock in {active_section.upper()} section yet.\n\n"
                 "Add stock with: 'I buy 10 bags rice 38k each'"
             )
             return
-
         total_value = sum(s["quantity"] * s["cost_price"] for s in stock)
-        lines = [f"🏪 *Your Current Stock*\n\nTotal Value: ₦{total_value:,.0f}\n"]
+        lines = [f"🏪 *{active_section.upper()} Stock*\n\nTotal Value: ₦{total_value:,.0f}\n"]
         for s in stock:
             qty = s["quantity"]
             status = "⚠️ LOW" if qty <= 2 else "✅"
-            lines.append(
-                f"{status} {s['item']}: {qty} units @ ₦{s['cost_price']:,.0f}"
-            )
+            lines.append(f"{status} {s['item']}: {qty} units @ ₦{s['cost_price']:,.0f}")
         send_whatsapp_message(phone, "\n".join(lines))
 
     # ─── ADD DEBT ────────────────────────────────────────
@@ -182,9 +175,9 @@ def handle_message(phone: str, text: str):
             )
             return
 
-        save_debt(phone, customer, item, qty, amount, due_date)
+        save_debt(phone, customer, item, qty, amount, due_date, active_section)
         reply = (
-            f"📝 Debt recorded!\n\n"
+            f"📝 Debt recorded! [{active_section.upper()}]\n\n"
             f"👤 {customer}\n"
             f"📦 {item} × {qty}\n"
             f"💰 Owes: ₦{amount:,.0f}\n"
@@ -233,7 +226,6 @@ def handle_message(phone: str, text: str):
         if not debts:
             send_whatsapp_message(phone, "🎉 Nobody owes you money!")
             return
-
         total_owed = sum(d["balance"] for d in debts)
         lines = [f"📋 *People Who Owe You*\n\nTotal: ₦{total_owed:,.0f}\n"]
         for d in debts:
@@ -249,12 +241,10 @@ def handle_message(phone: str, text: str):
         if not customer:
             send_whatsapp_message(phone, "Which customer? Tell me their name.")
             return
-
         debts = get_customer_debt(phone, customer)
         if not debts:
             send_whatsapp_message(phone, f"{customer} doesn't owe you anything! ✅")
             return
-
         total = sum(d["balance"] for d in debts)
         lines = [f"👤 *{customer}'s Debt*\n"]
         for d in debts:
@@ -263,6 +253,73 @@ def handle_message(phone: str, text: str):
                 + (f" (due {d['due_date']})" if d.get('due_date') else "")
             )
         lines.append(f"\n💰 Total: ₦{total:,.0f}")
+        send_whatsapp_message(phone, "\n".join(lines))
+
+    # ─── SWITCH SECTION ──────────────────────────────────
+    elif intent == "switch_section":
+        section = parsed.get("section")
+        if not section:
+            summaries = get_all_sections_summary(phone)
+            existing = list(summaries.keys())
+            send_whatsapp_message(phone,
+                "Which section do you want to switch to?\n\n"
+                f"Your sections: {', '.join(existing) if existing else 'none yet'}\n\n"
+                "Try: 'switch to drinks' or 'switch to food'"
+            )
+            return
+        set_current_section(phone, section)
+        send_whatsapp_message(phone,
+            f"✅ Switched to *{section.upper()}* section!\n\n"
+            f"All sales, stock and summaries will now be recorded under {section}.\n\n"
+            f"To switch back say: 'switch to [section name]'"
+        )
+
+    # ─── VIEW ONE SECTION SUMMARY ─────────────────────────
+    elif intent == "view_section_summary":
+        section = parsed.get("section") or get_current_section(phone)
+        summary = get_section_summary(phone, section)
+        send_whatsapp_message(phone,
+            f"📊 *{section.upper()} Summary*\n\n"
+            f"💰 Revenue: ₦{summary['revenue']:,.0f}\n"
+            f"📈 Profit: ₦{summary['profit']:,.0f}\n"
+            f"📦 Sales: {summary['count']}\n\n"
+            f"Keep it up! 🚀"
+        )
+
+    # ─── VIEW ALL SECTIONS ────────────────────────────────
+    elif intent == "view_all_sections":
+        summaries = get_all_sections_summary(phone)
+        if not summaries:
+            send_whatsapp_message(phone, "No sections found yet.")
+            return
+        total_revenue = sum(s["revenue"] for s in summaries.values())
+        total_profit = sum(s["profit"] for s in summaries.values())
+        lines = [f"📊 *All Business Sections*\n\nTotal Revenue: ₦{total_revenue:,.0f}\nTotal Profit: ₦{total_profit:,.0f}\n"]
+        for section, data in summaries.items():
+            lines.append(
+                f"🏷️ *{section.upper()}*\n"
+                f"   💰 Revenue: ₦{data['revenue']:,.0f}\n"
+                f"   📈 Profit: ₦{data['profit']:,.0f}\n"
+                f"   📦 Sales: {data['count']}"
+            )
+        send_whatsapp_message(phone, "\n".join(lines))
+
+    # ─── VIEW SECTION STOCK ───────────────────────────────
+    elif intent == "view_section_stock":
+        section = parsed.get("section") or get_current_section(phone)
+        stock = get_all_stock(phone, section)
+        if not stock:
+            send_whatsapp_message(phone,
+                f"No stock in {section} section yet.\n\n"
+                "Add stock with: 'I buy 10 bags rice 38k each'"
+            )
+            return
+        total_value = sum(s["quantity"] * s["cost_price"] for s in stock)
+        lines = [f"🏪 *{section.upper()} Stock*\n\nTotal Value: ₦{total_value:,.0f}\n"]
+        for s in stock:
+            qty = s["quantity"]
+            status = "⚠️ LOW" if qty <= 2 else "✅"
+            lines.append(f"{status} {s['item']}: {qty} units @ ₦{s['cost_price']:,.0f}")
         send_whatsapp_message(phone, "\n".join(lines))
 
     # ─── SUMMARIES ───────────────────────────────────────
@@ -309,7 +366,6 @@ def handle_message(phone: str, text: str):
         if not products:
             send_whatsapp_message(phone, "No sales data yet to analyze.")
             return
-
         lines = ["🏆 *Top Products*\n"]
         for i, (name, data) in enumerate(products, 1):
             lines.append(
@@ -319,12 +375,9 @@ def handle_message(phone: str, text: str):
                 f"   📊 ROI: {data['roi']}%\n"
                 f"   📦 Units sold: {data['quantity']:.0f}"
             )
-
-        # Generate and send chart
         chart = generate_top_products_chart(products, "Top Products Analysis")
         if chart:
-            caption = "\n".join(lines)
-            send_whatsapp_image(phone, chart, caption)
+            send_whatsapp_image(phone, chart, "\n".join(lines))
         else:
             send_whatsapp_message(phone, "\n".join(lines))
 
@@ -338,7 +391,6 @@ def handle_message(phone: str, text: str):
                 "Try: 'I sell 3 bags rice 45k to Emeka, I buy am 38k'"
             )
             return
-
         lines = ["👑 *Top Customers*\n"]
         for i, c in enumerate(customers, 1):
             lines.append(
@@ -353,11 +405,9 @@ def handle_message(phone: str, text: str):
         days = parsed.get("chart_days", 7)
         summary = get_last_n_days(phone, days)
         rows = summary.get("rows", [])
-
         if not rows:
             send_whatsapp_message(phone, f"No sales data for the last {days} days.")
             return
-
         chart = generate_sales_chart(rows, f"Sales - Last {days} Days")
         if chart:
             caption = (
@@ -380,18 +430,21 @@ def handle_message(phone: str, text: str):
 
     # ─── GREETING ────────────────────────────────────────
     elif intent == "greeting":
+        current = get_current_section(phone)
         send_whatsapp_message(phone,
-            "👋 Hello! I'm your business assistant.\n\n"
-            "Here's what I can do:\n"
-            "📦 Record sales & stock\n"
-            "💰 Daily, weekly, monthly summaries\n"
-            "📅 Any date range or last N days\n"
-            "🏆 Top products + ROI analysis\n"
-            "👑 Top customers\n"
-            "📊 Sales charts\n"
-            "📝 Debt tracking\n"
-            "🏪 Stock management\n\n"
-            "Just tell me what you need! 😊"
+            f"👋 Hello! I'm your business assistant.\n\n"
+            f"📍 Current section: *{current.upper()}*\n\n"
+            f"Here's what I can do:\n"
+            f"📦 Record sales & stock\n"
+            f"💰 Daily, weekly, monthly summaries\n"
+            f"📅 Any date range or last N days\n"
+            f"🏆 Top products + ROI analysis\n"
+            f"👑 Top customers\n"
+            f"📊 Sales charts\n"
+            f"📝 Debt tracking\n"
+            f"🏪 Stock management\n"
+            f"🏷️ Multiple business sections\n\n"
+            f"Say 'switch to food' or 'switch to drinks' to change section! 😊"
         )
 
     # ─── UNKNOWN ─────────────────────────────────────────
@@ -404,5 +457,6 @@ def handle_message(phone: str, text: str):
             "• 'Show top products'\n"
             "• 'Show my stock'\n"
             "• 'Sales chart'\n"
-            "• 'Who owe me money'"
+            "• 'Who owe me money'\n"
+            "• 'Switch to food'"
         )

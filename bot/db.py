@@ -10,7 +10,7 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 # ─── SALES ───────────────────────────────────────────────
 
-def save_sale(phone, item, quantity, selling_price, cost_price, profit, customer_name=None):
+def save_sale(phone, item, quantity, selling_price, cost_price, profit, customer_name=None, section="general"):
     supabase.table("sales").insert({
         "phone": phone,
         "item": item,
@@ -19,14 +19,11 @@ def save_sale(phone, item, quantity, selling_price, cost_price, profit, customer
         "cost_price": cost_price,
         "profit": profit,
         "customer_name": customer_name,
+        "section": section.lower(),
         "created_at": datetime.utcnow().isoformat()
     }).execute()
-
-    # Auto-deduct stock
     if item and quantity:
-        deduct_stock(phone, item, quantity)
-
-    # Update customer record
+        deduct_stock(phone, item, quantity, section)
     if customer_name:
         update_customer(phone, customer_name, selling_price * quantity)
 
@@ -145,10 +142,11 @@ def update_customer(phone, customer_name, amount):
 
 # ─── STOCK ───────────────────────────────────────────────
 
-def add_stock(phone, item, quantity, cost_price):
+def add_stock(phone, item, quantity, cost_price, section="general"):
     existing = supabase.table("stock")\
         .select("*").eq("phone", phone)\
-        .ilike("item", item).execute()
+        .ilike("item", item)\
+        .eq("section", section.lower()).execute()
     if existing.data:
         row = existing.data[0]
         new_qty = row["quantity"] + quantity
@@ -164,15 +162,17 @@ def add_stock(phone, item, quantity, cost_price):
             "item": item,
             "quantity": quantity,
             "cost_price": cost_price,
+            "section": section.lower(),
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }).execute()
 
 
-def deduct_stock(phone, item, quantity):
+def deduct_stock(phone, item, quantity, section="general"):
     existing = supabase.table("stock")\
         .select("*").eq("phone", phone)\
-        .ilike("item", item).execute()
+        .ilike("item", item)\
+        .eq("section", section.lower()).execute()
     if existing.data:
         row = existing.data[0]
         new_qty = max(0, row["quantity"] - quantity)
@@ -181,17 +181,17 @@ def deduct_stock(phone, item, quantity):
             "updated_at": datetime.utcnow().isoformat()
         }).eq("id", row["id"]).execute()
 
-
-def get_all_stock(phone):
-    result = supabase.table("stock")\
-        .select("*").eq("phone", phone)\
-        .order("item").execute()
-    return result.data
+def get_all_stock(phone, section=None):
+    query = supabase.table("stock")\
+        .select("*").eq("phone", phone)
+    if section:
+        query = query.eq("section", section.lower())
+    return query.order("item").execute().data
 
 
 # ─── DEBTS ───────────────────────────────────────────────
 
-def save_debt(phone, customer_name, item, quantity, amount, due_date=None):
+def save_debt(phone, customer_name, item, quantity, amount, due_date=None, section="general"):
     supabase.table("debts").insert({
         "phone": phone,
         "customer_name": customer_name,
@@ -202,10 +202,10 @@ def save_debt(phone, customer_name, item, quantity, amount, due_date=None):
         "balance": amount,
         "due_date": due_date,
         "status": "unpaid",
+        "section": section.lower(),
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat()
     }).execute()
-
 
 def get_all_debts(phone):
     result = supabase.table("debts")\
@@ -264,3 +264,55 @@ def archive_records(phone):
         "archived_at": datetime.utcnow().isoformat()
     }).eq("phone", phone).eq("archived", False).execute()
     return len(rows)
+
+    # ─── SECTIONS ────────────────────────────────────────────
+
+def get_current_section(phone):
+    result = supabase.table("user_sections")\
+        .select("*").eq("phone", phone).execute()
+    if result.data:
+        return result.data[0]["current_section"]
+    return "general"
+
+def set_current_section(phone, section):
+    existing = supabase.table("user_sections")\
+        .select("*").eq("phone", phone).execute()
+    if existing.data:
+        supabase.table("user_sections").update({
+            "current_section": section.lower(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("phone", phone).execute()
+    else:
+        supabase.table("user_sections").insert({
+            "phone": phone,
+            "current_section": section.lower(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).execute()
+
+def get_all_sections(phone):
+    result = supabase.table("sales")\
+        .select("section").eq("phone", phone)\
+        .eq("archived", False).execute()
+    sections = list(set(r["section"] for r in result.data if r["section"]))
+    return sections if sections else ["general"]
+
+def get_section_summary(phone, section, start_date=None, end_date=None):
+    query = supabase.table("sales")\
+        .select("*").eq("phone", phone)\
+        .eq("archived", False)\
+        .eq("section", section.lower())
+    if start_date:
+        query = query.gte("created_at", start_date)
+    if end_date:
+        query = query.lte("created_at", end_date)
+    rows = query.execute().data
+    revenue = sum(r["selling_price"] * r["quantity"] for r in rows)
+    profit = sum(r["profit"] for r in rows)
+    return {"revenue": revenue, "profit": profit, "count": len(rows), "rows": rows}
+
+def get_all_sections_summary(phone):
+    sections = get_all_sections(phone)
+    summaries = {}
+    for section in sections:
+        summaries[section] = get_section_summary(phone, section)
+    return summaries
