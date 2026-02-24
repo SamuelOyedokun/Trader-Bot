@@ -428,6 +428,16 @@ def handle_message(phone: str, text: str):
             f"Your slate is clean — start fresh! 🆕"
         )
 
+    # ─── API ERROR ───────────────────────────────────────
+    elif intent == "error":
+        send_whatsapp_message(phone,
+            "⚠️ I'm having trouble understanding right now.\n\n"
+            "Please try again in a few seconds. If this continues, "
+            "send a simpler message like:\n"
+            "• 'hello'\n"
+            "• 'my profit today'"
+        )
+
     # ─── GREETING ────────────────────────────────────────
     elif intent == "greeting":
         current = get_current_section(phone)

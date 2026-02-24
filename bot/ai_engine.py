@@ -2,13 +2,14 @@ from groq import Groq
 import os
 from dotenv import load_dotenv
 import json
+import time
 
 load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
-def understand_message(text: str) -> dict:
+def understand_message(text: str, retries: int = 3) -> dict:
     prompt = f"""
 You are a helpful assistant for Nigerian market traders.
 The user may write in English, Pidgin English, Yoruba, Hausa, Igbo or any mix.
@@ -26,7 +27,7 @@ INTENT OPTIONS:
 - view_debts: see all debtors
 - view_customer_debt: check one customer's debt
 - view_daily: today's summary
-- view_yesterday: yesterday's summary  
+- view_yesterday: yesterday's summary
 - view_weekly: this week
 - view_monthly: this month
 - view_last_n_days: last N days (extract n)
@@ -35,12 +36,12 @@ INTENT OPTIONS:
 - view_top_products: best selling products + ROI
 - view_top_customers: best customers by purchases
 - view_chart: show sales chart
+- switch_section: user wants to change active business section
+- view_section_summary: user wants summary of a specific section
+- view_all_sections: user wants to compare all sections
+- view_section_stock: user wants stock for a specific section
 - clear_records: archive old records, start fresh
 - greeting: hello etc
-- switch_section: user wants to change active business section e.g. "switch to drinks", "go to food section", "change to clothes"
-- view_section_summary: user wants summary of a specific section e.g. "food summary", "drinks profit"
-- view_all_sections: user wants to compare all sections together e.g. "show all sections", "compare all my businesses"
-- view_section_stock: user wants stock for a specific section
 - unknown: cannot understand
 
 KEY PATTERNS:
@@ -53,9 +54,9 @@ KEY PATTERNS:
 - "add stock / I buy [item] [qty] [price]" = add_stock
 - "show stock / my stock" = view_stock
 - "yesterday sales" = view_yesterday
-- "switch to [section] / go to [section] / change to [section]" = switch_section
-- "[section] summary / [section] profit / [section] sales" = view_section_summary
-- "all sections / compare sections / all businesses" = view_all_sections
+- "switch to [section] / go to [section]" = switch_section
+- "[section] summary / [section] profit" = view_section_summary
+- "all sections / compare sections" = view_all_sections
 
 JSON STRUCTURE:
 {{
@@ -74,8 +75,8 @@ JSON STRUCTURE:
   "n_days": <number of days or null>,
   "start_date": "<YYYY-MM-DD or null>",
   "end_date": "<YYYY-MM-DD or null>",
-  "section": "<section name mentioned or null>",
-  "chart_days": <number of days for chart, default 7>
+  "chart_days": <number of days for chart, default 7>,
+  "section": "<section name or null>"
 }}
 
 IMPORTANT:
@@ -83,17 +84,33 @@ IMPORTANT:
 - Extract ANY name as customer_name
 - Only return JSON
 """
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.1
-    )
-    try:
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return json.loads(raw.strip())
-    except:
-        return {"intent": "unknown"}
+
+    for attempt in range(retries):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                timeout=15
+            )
+            raw = response.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            return json.loads(raw.strip())
+
+        except json.JSONDecodeError:
+            print(f"JSON parse error on attempt {attempt + 1}")
+            if attempt < retries - 1:
+                time.sleep(1)
+            continue
+
+        except Exception as e:
+            print(f"Groq API error on attempt {attempt + 1}: {e}")
+            if attempt < retries - 1:
+                time.sleep(2)
+            continue
+
+    # All retries failed
+    return {"intent": "error"}
