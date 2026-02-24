@@ -132,7 +132,7 @@ Create a `.env` file in the root directory:
 GROQ_API_KEY=your_groq_api_key
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_WHATSAPP_NUMBER=+14155238886
+TWILIO_WHATSAPP_NUMBER=twilio_whatsapp_number
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_KEY=your_supabase_anon_key
 VERIFY_TOKEN=traderbot123
