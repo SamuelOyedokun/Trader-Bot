@@ -84,13 +84,14 @@ JSON STRUCTURE:
   "start_date": "<YYYY-MM-DD or null>",
   "end_date": "<YYYY-MM-DD or null>",
   "chart_days": <number of days for chart, default 7>,
-  "section": "<section name or null>"
+  "section": "<section name or null>",
   "bulk_unit": "<bag, crate, carton, pack, basket or null>",
   "retail_unit": "<mudu, paint, rubber, tin, cup, piece, wrap or null>",
   "units_per_bulk": <number or null>,
   "is_retail": <true if selling small units, false if selling full bulk>
-  - For set_unit_conversion: put the product name in items[0].item field
 }}
+
+- For set_unit_conversion: put the product name in items[0].item field
 
 DEBT AMOUNT RULES:
 - amount in items is ALWAYS per unit price

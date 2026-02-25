@@ -6,6 +6,9 @@ import logging
 from bot.subscription import get_expiry_warning
 from datetime import datetime, timedelta
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 def send_expiry_reminders():
     from bot.message_handler import send_whatsapp_message
     from bot.subscription import get_expiry_warning

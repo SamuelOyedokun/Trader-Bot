@@ -7,7 +7,7 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     get_customer_debt, record_payment,
                     add_stock, get_all_stock,
                     get_current_section, set_current_section,
-                    save_unit_conversion, get_unit_conversion, get_all_unit_conversions
+                    save_unit_conversion, get_unit_conversion, get_all_unit_conversions,
                     get_all_sections_summary, get_section_summary)
 from bot.charts import generate_sales_chart, generate_top_products_chart, upload_chart
 from twilio.rest import Client
@@ -43,18 +43,6 @@ def send_whatsapp_image(phone: str, image_buf, caption: str):
         send_whatsapp_message(phone, caption)
 
 
-def send_whatsapp_image(phone: str, image_buf, caption: str):
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp.write(image_buf.read())
-            tmp_path = tmp.name
-        send_whatsapp_message(phone, caption)
-        os.unlink(tmp_path)
-    except Exception as e:
-        print(f"Image send error: {e}")
-        send_whatsapp_message(phone, caption)
-
-
 def format_summary(title, summary):
     return (
         f"📊 *{title}*\n\n"
@@ -64,10 +52,17 @@ def format_summary(title, summary):
         f"Keep it up! 🚀"
     )
 
-
 def handle_message(phone: str, text: str):
     if not text:
         return
+    
+def send_whatsapp_message(phone: str, message: str):
+    client = get_twilio_client()
+    client.messages.create(
+        from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER')}",
+        body=message,
+        to=f"whatsapp:+{phone}"
+    )    
     
     # ─── SUBSCRIPTION CHECK ──────────────────────────────
     has_access, status, days_left = check_access(phone)
