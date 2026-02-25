@@ -1,13 +1,14 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from bot.db import get_weekly_summary, supabase
-from bot.message_handler import send_whatsapp_message
 import pytz
 import logging
 from bot.subscription import get_expiry_warning
 from datetime import datetime, timedelta
 
 def send_expiry_reminders():
+    from bot.message_handler import send_whatsapp_message
+    from bot.subscription import get_expiry_warning
     """Send reminders to users whose subscription expires in 3 days."""
     logger.info("🔔 Running expiry reminder job...")
     try:
@@ -54,6 +55,7 @@ def get_all_active_users():
 
 
 def send_weekly_summaries():
+    from bot.message_handler import send_whatsapp_message
     """Send weekly summary to all active users."""
     logger.info("🕗 Running weekly summary job...")
     phones = get_all_active_users()
