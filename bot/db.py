@@ -214,6 +214,13 @@ def deduct_stock(phone, item, quantity, section="general", is_retail=False):
                 "updated_at": datetime.utcnow().isoformat()
             }).eq("id", row["id"]).execute()
 
+def get_all_stock(phone, section=None):
+    query = supabase.table("stock")\
+        .select("*").eq("phone", phone)
+    if section:
+        query = query.eq("section", section.lower())
+    return query.order("item").execute().data
+
 # ─── DEBTS ───────────────────────────────────────────────
 
 def save_debt(phone, customer_name, item, quantity, amount, due_date=None, section="general"):
