@@ -243,6 +243,12 @@ def handle_message(phone: str, text: str):
         customer = parsed.get("customer_name")
         amount = parsed.get("amount")
 
+        # Handle "pay everything" case
+        if not amount and customer:
+            debts = get_customer_debt(phone, customer)
+            if debts:
+                amount = sum(d["balance"] for d in debts)
+
         if not customer or not amount:
             send_whatsapp_message(phone,
                 "Tell me who paid and how much.\n\n"

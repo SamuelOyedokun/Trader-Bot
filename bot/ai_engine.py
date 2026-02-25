@@ -57,6 +57,7 @@ KEY PATTERNS:
 - "switch to [section] / go to [section]" = switch_section
 - "[section] summary / [section] profit" = view_section_summary
 - "all sections / compare sections" = view_all_sections
+- "[name] don pay everything / [name] clear debt" = record_payment, amount should be set to 999999999 (will be capped at actual balance)
 
 JSON STRUCTURE:
 {{
@@ -78,6 +79,12 @@ JSON STRUCTURE:
   "chart_days": <number of days for chart, default 7>,
   "section": "<section name or null>"
 }}
+
+DEBT AMOUNT RULES:
+- amount in items is ALWAYS per unit price
+- "Biodun take 5 tins tomato 1000 each" → amount=1000, quantity=5 (total=5000)
+- "Amaka take 2 bags rice 45000" → amount=22500, quantity=2 (total=45000) — split evenly
+- "Emeka owe me 10000" → put 10000 in top-level amount field, not items
 
 IMPORTANT:
 - Convert 45k=45000, 1.5k=1500, 200k=200000
