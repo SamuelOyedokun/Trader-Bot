@@ -42,6 +42,8 @@ INTENT OPTIONS:
 - view_section_stock: user wants stock for a specific section
 - clear_records: archive old records, start fresh
 - greeting: hello etc
+- set_unit_conversion: trader is defining how many small units are in one bulk unit e.g. "1 bag rice = 33 mudu", "1 crate egg = 30 pieces", "1 carton biscuit = 120 pieces"
+- view_unit_conversions: trader wants to see all their saved unit breakdowns e.g. "show my units", "show my conversions"
 - unknown: cannot understand
 
 KEY PATTERNS:
@@ -59,6 +61,9 @@ KEY PATTERNS:
 - "all sections / compare sections" = view_all_sections
 - "[name] don pay everything / [name] clear debt" = record_payment, amount should be set to 999999999 (will be capped at actual balance)
 - "[section name] summary / [section name] profit / [section name] sales" = view_section_summary, extract section name
+- "1 [bulk] [item] = [number] [retail]" = set_unit_conversion
+- "1 [bulk] [item] get/contain/has [number] [retail]" = set_unit_conversion
+- "show my units / show conversions" = view_unit_conversions
 - IMPORTANT: "food summary", "drinks summary", "clothes summary" = view_section_summary NOT view_daily
 
 JSON STRUCTURE:
@@ -80,6 +85,10 @@ JSON STRUCTURE:
   "end_date": "<YYYY-MM-DD or null>",
   "chart_days": <number of days for chart, default 7>,
   "section": "<section name or null>"
+  "bulk_unit": "<bag, crate, carton, pack, basket or null>",
+  "retail_unit": "<mudu, paint, rubber, tin, cup, piece, wrap or null>",
+  "units_per_bulk": <number or null>,
+  "is_retail": <true if selling small units, false if selling full bulk>
 }}
 
 DEBT AMOUNT RULES:

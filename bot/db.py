@@ -142,18 +142,32 @@ def update_customer(phone, customer_name, amount):
 
 # ─── STOCK ───────────────────────────────────────────────
 
-def add_stock(phone, item, quantity, cost_price, section="general"):
+def add_stock(phone, item, quantity, cost_price, section="general", retail_quantity=0, units_per_bulk=1, bulk_unit="bag", retail_unit="unit"):
     existing = supabase.table("stock")\
         .select("*").eq("phone", phone)\
         .ilike("item", item)\
         .eq("section", section.lower()).execute()
+
+    # Get unit conversion if exists
+    conversion = get_unit_conversion(phone, item)
+    if conversion:
+        units_per_bulk = conversion["units_per_bulk"]
+        bulk_unit = conversion["bulk_unit"]
+        retail_unit = conversion["retail_unit"]
+        retail_quantity = quantity * units_per_bulk
+
     if existing.data:
         row = existing.data[0]
         new_qty = row["quantity"] + quantity
+        new_retail = row.get("retail_quantity", 0) + retail_quantity
         avg_cost = ((row["cost_price"] * row["quantity"]) + (cost_price * quantity)) / new_qty
         supabase.table("stock").update({
             "quantity": new_qty,
+            "retail_quantity": new_retail,
             "cost_price": round(avg_cost, 2),
+            "units_per_bulk": units_per_bulk,
+            "bulk_unit": bulk_unit,
+            "retail_unit": retail_unit,
             "updated_at": datetime.utcnow().isoformat()
         }).eq("id", row["id"]).execute()
     else:
@@ -161,33 +175,44 @@ def add_stock(phone, item, quantity, cost_price, section="general"):
             "phone": phone,
             "item": item,
             "quantity": quantity,
+            "retail_quantity": retail_quantity,
             "cost_price": cost_price,
             "section": section.lower(),
+            "units_per_bulk": units_per_bulk,
+            "bulk_unit": bulk_unit,
+            "retail_unit": retail_unit,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }).execute()
 
-
-def deduct_stock(phone, item, quantity, section="general"):
+def deduct_stock(phone, item, quantity, section="general", is_retail=False):
     existing = supabase.table("stock")\
         .select("*").eq("phone", phone)\
         .ilike("item", item)\
         .eq("section", section.lower()).execute()
     if existing.data:
         row = existing.data[0]
-        new_qty = max(0, row["quantity"] - quantity)
-        supabase.table("stock").update({
-            "quantity": new_qty,
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("id", row["id"]).execute()
+        units_per_bulk = row.get("units_per_bulk", 1) or 1
 
-def get_all_stock(phone, section=None):
-    query = supabase.table("stock")\
-        .select("*").eq("phone", phone)
-    if section:
-        query = query.eq("section", section.lower())
-    return query.order("item").execute().data
-
+        if is_retail:
+            # Deduct from retail quantity
+            new_retail = max(0, row.get("retail_quantity", 0) - quantity)
+            # Recalculate bulk quantity from retail
+            new_bulk = new_retail / units_per_bulk
+            supabase.table("stock").update({
+                "retail_quantity": new_retail,
+                "quantity": new_bulk,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", row["id"]).execute()
+        else:
+            # Deduct bulk quantity
+            new_qty = max(0, row["quantity"] - quantity)
+            new_retail = new_qty * units_per_bulk
+            supabase.table("stock").update({
+                "quantity": new_qty,
+                "retail_quantity": new_retail,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", row["id"]).execute()
 
 # ─── DEBTS ───────────────────────────────────────────────
 
@@ -316,3 +341,38 @@ def get_all_sections_summary(phone):
     for section in sections:
         summaries[section] = get_section_summary(phone, section)
     return summaries
+
+# ─── UNIT CONVERSIONS ────────────────────────────────────
+
+def save_unit_conversion(phone, item, bulk_unit, retail_unit, units_per_bulk):
+    existing = supabase.table("unit_conversions")\
+        .select("*").eq("phone", phone)\
+        .ilike("item", item).execute()
+    if existing.data:
+        supabase.table("unit_conversions").update({
+            "bulk_unit": bulk_unit,
+            "retail_unit": retail_unit,
+            "units_per_bulk": units_per_bulk,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", existing.data[0]["id"]).execute()
+    else:
+        supabase.table("unit_conversions").insert({
+            "phone": phone,
+            "item": item,
+            "bulk_unit": bulk_unit,
+            "retail_unit": retail_unit,
+            "units_per_bulk": units_per_bulk,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).execute()
+
+def get_unit_conversion(phone, item):
+    result = supabase.table("unit_conversions")\
+        .select("*").eq("phone", phone)\
+        .ilike("item", item).execute()
+    return result.data[0] if result.data else None
+
+def get_all_unit_conversions(phone):
+    result = supabase.table("unit_conversions")\
+        .select("*").eq("phone", phone).execute()
+    return result.data
