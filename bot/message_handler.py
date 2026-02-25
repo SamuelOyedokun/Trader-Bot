@@ -210,7 +210,7 @@ def handle_message(phone: str, text: str):
             if not amount and first_item.get("amount"):
                 # If quantity is 1, use amount directly as total
                 # If quantity > 1, still use amount directly — trader usually states total debt
-                amount = first_item["amount"]
+                amount = first_item["amount"] * qty
 
         if not customer:
             send_whatsapp_message(phone,
