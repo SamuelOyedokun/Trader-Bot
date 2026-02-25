@@ -42,7 +42,7 @@ INTENT OPTIONS:
 - view_section_stock: user wants stock for a specific section
 - clear_records: archive old records, start fresh
 - greeting: hello etc
-- set_unit_conversion: trader is defining how many small units are in one bulk unit e.g. "1 bag rice = 33 mudu", "1 crate egg = 30 pieces", "1 carton biscuit = 120 pieces"
+- set_unit_conversion: trader is defining how many small units are in one bulk unit e.g. "1 bag rice = 33 mudu". Extract the product name into items array.
 - view_unit_conversions: trader wants to see all their saved unit breakdowns e.g. "show my units", "show my conversions"
 - unknown: cannot understand
 
@@ -89,6 +89,7 @@ JSON STRUCTURE:
   "retail_unit": "<mudu, paint, rubber, tin, cup, piece, wrap or null>",
   "units_per_bulk": <number or null>,
   "is_retail": <true if selling small units, false if selling full bulk>
+  - For set_unit_conversion: put the product name in items[0].item field
 }}
 
 DEBT AMOUNT RULES:

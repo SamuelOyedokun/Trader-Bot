@@ -7,6 +7,7 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     get_customer_debt, record_payment,
                     add_stock, get_all_stock,
                     get_current_section, set_current_section,
+                    save_unit_conversion, get_unit_conversion, get_all_unit_conversions
                     get_all_sections_summary, get_section_summary)
 from bot.charts import generate_sales_chart, generate_top_products_chart, upload_chart
 from twilio.rest import Client
@@ -426,6 +427,44 @@ def handle_message(phone: str, text: str):
             return
         summary = get_summary_by_range(phone, start, end)
         send_whatsapp_message(phone, format_summary(f"Sales {start} to {end}", summary))
+
+    elif intent == "set_unit_conversion":
+        # Try to get item from items array first, then from the raw text
+        item = None
+        if parsed.get("items") and parsed["items"][0].get("item"):
+            item = parsed["items"][0].get("item")
+        else:
+            # Extract item from the message directly
+            # "1 bag rice = 33 mudu" → rice
+            words = text.lower().split()
+            skip = ["1", "one", "a", "an", "=", "is", "are", "has", "have", "get", "contain"]
+            bulk_words = ["bag", "bags", "crate", "crates", "carton", "cartons", "pack", "packs", "basket", "baskets", "bundle", "bundles"]
+            retail_words = ["mudu", "paint", "rubber", "tin", "cup", "piece", "pieces", "wrap", "wraps", "unit", "units", "pack", "packs"]
+            for word in words:
+                if word not in skip and word not in bulk_words and word not in retail_words and not word.isdigit():
+                    item = word
+                    break
+
+        bulk_unit = parsed.get("bulk_unit", "bag")
+        retail_unit = parsed.get("retail_unit", "unit")
+        units_per_bulk = parsed.get("units_per_bulk")
+
+        if not item or not units_per_bulk:
+            send_whatsapp_message(phone,
+                "Tell me the breakdown.\n\n"
+                "Try: '1 bag rice = 33 mudu'\n"
+                "Or: '1 crate egg = 30 pieces'"
+            )
+            return
+
+        save_unit_conversion(phone, item, bulk_unit, retail_unit, units_per_bulk)
+        send_whatsapp_message(phone,
+            f"✅ Unit conversion saved!\n\n"
+            f"📦 {item.upper()}\n"
+            f"1 {bulk_unit} = {units_per_bulk:.0f} {retail_unit}\n\n"
+            f"Now when you add stock in {bulk_unit}s, I'll automatically "
+            f"track your {retail_unit}s too! 🎯"
+        )
 
     # ─── TOP PRODUCTS ─────────────────────────────────────
     elif intent == "view_top_products":
