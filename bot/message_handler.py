@@ -8,7 +8,7 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     add_stock, get_all_stock,
                     get_current_section, set_current_section,
                     get_all_sections_summary, get_section_summary)
-from bot.charts import generate_sales_chart, generate_top_products_chart
+from bot.charts import generate_sales_chart, generate_top_products_chart, upload_chart
 from twilio.rest import Client
 import os
 import tempfile
@@ -23,13 +23,23 @@ def get_twilio_client():
     return Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 
 
-def send_whatsapp_message(phone: str, message: str):
-    client = get_twilio_client()
-    client.messages.create(
-        from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER')}",
-        body=message,
-        to=f"whatsapp:+{phone}"
-    )
+def send_whatsapp_image(phone: str, image_buf, caption: str):
+    try:
+        # Upload to Cloudinary
+        image_url = upload_chart(image_buf)
+        if image_url:
+            client = get_twilio_client()
+            client.messages.create(
+                from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER')}",
+                body=caption,
+                media_url=[image_url],
+                to=f"whatsapp:+{phone}"
+            )
+        else:
+            send_whatsapp_message(phone, caption)
+    except Exception as e:
+        print(f"Image send error: {e}")
+        send_whatsapp_message(phone, caption)
 
 
 def send_whatsapp_image(phone: str, image_buf, caption: str):

@@ -26,7 +26,7 @@ INTENT OPTIONS:
 - record_payment: customer paying back debt
 - view_debts: see all debtors
 - view_customer_debt: check one customer's debt
-- view_daily: today's summary
+- view_daily: ONLY use this for "today", "today's profit", "my profit today" — NOT for section names like food/drinks/clothes
 - view_yesterday: yesterday's summary
 - view_weekly: this week
 - view_monthly: this month
@@ -58,6 +58,8 @@ KEY PATTERNS:
 - "[section] summary / [section] profit" = view_section_summary
 - "all sections / compare sections" = view_all_sections
 - "[name] don pay everything / [name] clear debt" = record_payment, amount should be set to 999999999 (will be capped at actual balance)
+- "[section name] summary / [section name] profit / [section name] sales" = view_section_summary, extract section name
+- IMPORTANT: "food summary", "drinks summary", "clothes summary" = view_section_summary NOT view_daily
 
 JSON STRUCTURE:
 {{
