@@ -127,10 +127,25 @@ def handle_message(phone: str, text: str):
                     f"📦 {item} × {qty}\n"
                     f"   Sell: ₦{amount:,.0f} | Cost: ₦{cost:,.0f} | Profit: ₦{profit:,.0f}"
                 )
+            
             elif amount and not cost:
-                missing_cost.append(item)
-                save_sale(phone, item, qty, amount, 0, 0, customer, active_section)
-                reply_lines.append(f"📦 {item} × {qty} — ₦{amount:,.0f} (no cost price)")
+                # Try to look up cost price from stock records
+                stock_result = get_all_stock(phone, active_section)
+                stock_map = {s["item"].lower(): s["cost_price"] for s in stock_result}
+                cost = stock_map.get(item.lower(), 0)
+
+                if cost:
+                    profit = (amount - cost) * qty
+                    total_profit += profit
+                    save_sale(phone, item, qty, amount, cost, profit, customer, active_section)
+                    reply_lines.append(
+                        f"📦 {item} × {qty}\n"
+                        f"   Sell: ₦{amount:,.0f} | Cost: ₦{cost:,.0f} (from stock) | Profit: ₦{profit:,.0f}"
+                    )
+                else:
+                    missing_cost.append(item)
+                    save_sale(phone, item, qty, amount, 0, 0, customer, active_section)
+                    reply_lines.append(f"📦 {item} × {qty} — ₦{amount:,.0f} (no cost price)")
 
         reply_lines.append(f"\n💰 Total Profit: ₦{total_profit:,.0f}")
         if missing_cost:
@@ -494,7 +509,6 @@ def handle_message(phone: str, text: str):
             f"Here's what I can do:\n"
             f"📦 Record sales & stock\n"
             f"💰 Daily, weekly, monthly summaries\n"
-            f"📅 Any date range or last N days\n"
             f"🏆 Top products + ROI analysis\n"
             f"👑 Top customers\n"
             f"📊 Sales charts\n"
