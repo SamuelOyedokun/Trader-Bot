@@ -46,7 +46,9 @@ def receive_message():
         else:
             print("No phone or text found")
     except Exception as e:
+        import traceback
         print(f"Error: {e}")
+        traceback.print_exc()
     return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, {'Content-Type': 'text/xml'}
 
 
