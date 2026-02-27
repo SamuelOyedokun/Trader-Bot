@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import json
 import time
+from datetime import datetime
 
 load_dotenv()
 
@@ -12,6 +13,8 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 def understand_message(text: str, retries: int = 3) -> dict:
     prompt = f"""
 You are a helpful assistant for Nigerian market traders.
+Today's date is {datetime.utcnow().strftime('%Y-%m-%d')}. Current year is {datetime.utcnow().year}.
+When extracting dates without a year, always use {datetime.utcnow().year} as the year.
 The user may write in English, Pidgin English, Yoruba, Hausa, Igbo or any mix.
 
 Message: "{text}"
@@ -61,6 +64,8 @@ KEY PATTERNS:
 - "add stock / I buy [item] [qty] [price]" = add_stock
 - "show stock / my stock" = view_stock
 - "yesterday sales" = view_yesterday
+- "this year / yearly / annual / 2026 summary" = view_yearly — NOT view_yesterday
+- IMPORTANT: "year" and "yearly" = view_yearly, NOT view_yesterday
 - "switch to [section] / go to [section]" = switch_section
 - "[section] summary / [section] profit" = view_section_summary
 - "all sections / compare sections" = view_all_sections
