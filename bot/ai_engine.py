@@ -44,6 +44,9 @@ INTENT OPTIONS:
 - greeting: hello etc
 - set_unit_conversion: trader is defining how many small units are in one bulk unit e.g. "1 bag rice = 33 mudu". Extract the product name into items array.
 - view_unit_conversions: trader wants to see all their saved unit breakdowns e.g. "show my units", "show my conversions"
+- correct_stock: trader wants to correct/update stock quantity to a specific number e.g. "correct rice to 8 bags", "rice stock is wrong, change to 15", "update rice stock to 10"
+- remove_stock: trader wants to remove/reduce stock quantity e.g. "remove 5 bags rice from stock", "reduce rice by 3"
+- delete_stock: trader wants to completely delete an item from stock e.g. "delete rice from stock", "remove rice completely"
 - unknown: cannot understand
 
 KEY PATTERNS:
@@ -64,6 +67,12 @@ KEY PATTERNS:
 - "1 [bulk] [item] = [number] [retail]" = set_unit_conversion
 - "1 [bulk] [item] get/contain/has [number] [retail]" = set_unit_conversion
 - "show my units / show conversions" = view_unit_conversions
+- "correct [item] to [number]" = correct_stock
+- "update [item] stock to [number]" = correct_stock
+- "remove [number] [item] from stock" = remove_stock
+- "reduce [item] by [number]" = remove_stock
+- "delete [item] from stock" = delete_stock
+- "remove [item] completely" = delete_stock
 - IMPORTANT: "food summary", "drinks summary", "clothes summary" = view_section_summary NOT view_daily
 
 JSON STRUCTURE:

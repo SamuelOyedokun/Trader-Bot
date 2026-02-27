@@ -6,6 +6,7 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     archive_records, save_debt, get_all_debts,
                     get_customer_debt, record_payment,
                     add_stock, get_all_stock,
+                    correct_stock, remove_stock_quantity, delete_stock_item,
                     get_current_section, set_current_section,
                     save_unit_conversion, get_unit_conversion, get_all_unit_conversions,
                     get_all_sections_summary, get_section_summary)
@@ -573,6 +574,83 @@ def handle_message(phone: str, text: str):
                 )
             else:
                 send_whatsapp_message(phone, get_payment_message(phone))
+
+       # ─── CORRECT STOCK ───────────────────────────────────
+        elif intent == "correct_stock":
+            items = parsed.get("items", [])
+            if not items:
+                send_whatsapp_message(phone,
+                    "Tell me what to correct.\n\n"
+                    "Try: 'correct rice to 8 bags'"
+                )
+                return
+            item = items[0].get("item")
+            new_qty = items[0].get("quantity")
+            if not item or new_qty is None:
+                send_whatsapp_message(phone,
+                    "Tell me the item and new quantity.\n\n"
+                    "Try: 'correct rice to 8 bags'"
+                )
+                return
+            success = correct_stock(phone, item, new_qty, active_section)
+            if success:
+                send_whatsapp_message(phone,
+                    f"✅ Stock corrected!\n\n"
+                    f"📦 {item}: now {new_qty} units\n\n"
+                    f"Send 'show my stock' to confirm."
+                )
+            else:
+                send_whatsapp_message(phone,
+                    f"❌ {item} not found in stock.\n\n"
+                    f"Check the name and try again."
+                )
+
+        # ─── REMOVE STOCK QUANTITY ────────────────────────────
+        elif intent == "remove_stock":
+            items = parsed.get("items", [])
+            if not items:
+                send_whatsapp_message(phone,
+                    "Tell me what to remove.\n\n"
+                    "Try: 'remove 5 bags rice from stock'"
+                )
+                return
+            item = items[0].get("item")
+            qty = items[0].get("quantity")
+            if not item or not qty:
+                send_whatsapp_message(phone,
+                    "Tell me the item and quantity to remove.\n\n"
+                    "Try: 'remove 5 bags rice from stock'"
+                )
+                return
+            new_qty = remove_stock_quantity(phone, item, qty, active_section)
+            if new_qty is not None:
+                send_whatsapp_message(phone,
+                    f"✅ Stock updated!\n\n"
+                    f"📦 {item}: removed {qty} units\n"
+                    f"📦 Remaining: {new_qty} units\n\n"
+                    f"Send 'show my stock' to confirm."
+                )
+            else:
+                send_whatsapp_message(phone,
+                    f"❌ {item} not found in stock.\n\n"
+                    f"Check the name and try again."
+                )
+
+        # ─── DELETE STOCK ITEM ────────────────────────────────
+        elif intent == "delete_stock":
+            items = parsed.get("items", [])
+            item = items[0].get("item") if items else None
+            if not item:
+                send_whatsapp_message(phone,
+                    "Which item do you want to delete?\n\n"
+                    "Try: 'delete rice from stock'"
+                )
+                return
+            delete_stock_item(phone, item, active_section)
+            send_whatsapp_message(phone,
+                f"🗑️ {item} deleted from stock!\n\n"
+                f"Send 'show my stock' to confirm."
+            )         
 
         # ─── GREETING ────────────────────────────────────────
         elif intent == "greeting":

@@ -383,3 +383,50 @@ def get_all_unit_conversions(phone):
     result = supabase.table("unit_conversions")\
         .select("*").eq("phone", phone).execute()
     return result.data
+
+def correct_stock(phone, item, new_quantity, section="general"):
+    """Set stock to exact quantity."""
+    existing = supabase.table("stock")\
+        .select("*").eq("phone", phone)\
+        .ilike("item", item)\
+        .eq("section", section.lower()).execute()
+    if existing.data:
+        row = existing.data[0]
+        units_per_bulk = row.get("units_per_bulk", 1) or 1
+        new_retail = new_quantity * units_per_bulk
+        supabase.table("stock").update({
+            "quantity": new_quantity,
+            "retail_quantity": new_retail,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", row["id"]).execute()
+        return True
+    return False
+
+
+def remove_stock_quantity(phone, item, quantity, section="general"):
+    """Remove specific quantity from stock."""
+    existing = supabase.table("stock")\
+        .select("*").eq("phone", phone)\
+        .ilike("item", item)\
+        .eq("section", section.lower()).execute()
+    if existing.data:
+        row = existing.data[0]
+        new_qty = max(0, row["quantity"] - quantity)
+        units_per_bulk = row.get("units_per_bulk", 1) or 1
+        new_retail = new_qty * units_per_bulk
+        supabase.table("stock").update({
+            "quantity": new_qty,
+            "retail_quantity": new_retail,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", row["id"]).execute()
+        return new_qty
+    return None
+
+
+def delete_stock_item(phone, item, section="general"):
+    """Completely delete an item from stock."""
+    supabase.table("stock")\
+        .delete().eq("phone", phone)\
+        .ilike("item", item)\
+        .eq("section", section.lower()).execute()
+    return True
