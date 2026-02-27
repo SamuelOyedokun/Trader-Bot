@@ -7,6 +7,7 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     get_customer_debt, record_payment,
                     add_stock, get_all_stock,
                     correct_stock, remove_stock_quantity, delete_stock_item,
+                    get_yearly_summary, get_restock_history, get_restock_by_date,
                     get_current_section, set_current_section,
                     save_unit_conversion, get_unit_conversion, get_all_unit_conversions,
                     get_all_sections_summary, get_section_summary)
@@ -652,6 +653,65 @@ def handle_message(phone: str, text: str):
                 f"Send 'show my stock' to confirm."
             )         
 
+# ─── YEARLY SUMMARY ──────────────────────────────────
+        elif intent == "view_yearly":
+            year = datetime.now().year
+            if parsed.get("start_date"):
+                try:
+                    year = int(parsed["start_date"][:4])
+                except:
+                    pass
+            summary = get_yearly_summary(phone, year)
+            send_whatsapp_message(phone,
+                f"📊 *{year} Annual Summary*\n\n"
+                f"💰 Revenue: ₦{summary['revenue']:,.0f}\n"
+                f"📈 Profit: ₦{summary['profit']:,.0f}\n"
+                f"📦 Total Sales: {summary['count']}\n\n"
+                f"Keep it up! 🚀"
+            )
+
+        # ─── RESTOCK HISTORY ─────────────────────────────────
+        elif intent == "view_restock_history":
+            history = get_restock_history(phone, active_section)
+            if not history:
+                send_whatsapp_message(phone,
+                    "No restock history found.\n\n"
+                    "Start adding stock with: 'I buy 10 bags rice 20k each'"
+                )
+                return
+            lines = [f"📦 *Restock History*\n"]
+            for h in history[:10]:
+                date = h["created_at"][:10]
+                lines.append(
+                    f"📅 {date} — {h['item']}: {h['quantity']:.0f} units @ ₦{h['cost_price']:,.0f} "
+                    f"(Total: ₦{h['total_cost']:,.0f})"
+                )
+            send_whatsapp_message(phone, "\n".join(lines))
+
+        # ─── RESTOCK BY DATE ──────────────────────────────────
+        elif intent == "view_restock_by_date":
+            date_str = parsed.get("start_date")
+            if not date_str:
+                send_whatsapp_message(phone,
+                    "Which date? Try: 'what did I buy on Feb 10'"
+                )
+                return
+            history = get_restock_by_date(phone, date_str)
+            if not history:
+                send_whatsapp_message(phone,
+                    f"No restock records found for {date_str}."
+                )
+                return
+            total = sum(h["total_cost"] for h in history)
+            lines = [f"📦 *Restock on {date_str}*\n"]
+            for h in history:
+                lines.append(
+                    f"✅ {h['item']}: {h['quantity']:.0f} units @ ₦{h['cost_price']:,.0f} "
+                    f"= ₦{h['total_cost']:,.0f}"
+                )
+            lines.append(f"\n💰 Total Spent: ₦{total:,.0f}")
+            send_whatsapp_message(phone, "\n".join(lines))
+
         # ─── GREETING ────────────────────────────────────────
         elif intent == "greeting":
             current = get_current_section(phone)
@@ -666,7 +726,6 @@ def handle_message(phone: str, text: str):
                 f"📊 Sales charts\n"
                 f"📝 Debt tracking\n"
                 f"🏪 Stock management\n"
-                f"🏷️ Multiple business sections\n"
                 f"📐 Unit breakdown (bags → mudus)\n\n"
                 f"Say 'switch to food' or 'switch to drinks' to change section! 😊"
             )

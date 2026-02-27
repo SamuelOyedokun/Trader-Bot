@@ -47,6 +47,8 @@ INTENT OPTIONS:
 - correct_stock: trader wants to correct/update stock quantity to a specific number e.g. "correct rice to 8 bags", "rice stock is wrong, change to 15", "update rice stock to 10"
 - remove_stock: trader wants to remove/reduce stock quantity e.g. "remove 5 bags rice from stock", "reduce rice by 3"
 - delete_stock: trader wants to completely delete an item from stock e.g. "delete rice from stock", "remove rice completely"
+- view_restock_history: trader wants to see their stock purchase history e.g. "show restock history", "what did I buy", "show my purchases"
+- view_restock_by_date: trader wants restock on a specific date e.g. "what did I buy on Feb 10", "restock on Jan 5"
 - unknown: cannot understand
 
 KEY PATTERNS:
@@ -73,6 +75,8 @@ KEY PATTERNS:
 - "reduce [item] by [number]" = remove_stock
 - "delete [item] from stock" = delete_stock
 - "remove [item] completely" = delete_stock
+- "show restock history / what did I buy / show my purchases" = view_restock_history
+- "what did I buy on [date] / restock on [date]" = view_restock_by_date, extract start_date
 - IMPORTANT: "food summary", "drinks summary", "clothes summary" = view_section_summary NOT view_daily
 
 JSON STRUCTURE:

@@ -183,6 +183,16 @@ def add_stock(phone, item, quantity, cost_price, section="general", retail_quant
             "retail_unit": retail_unit,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
+        })
+        # Log to stock history
+        supabase.table("stock_history").insert({
+            "phone": phone,
+            "item": item,
+            "quantity": quantity,
+            "cost_price": cost_price,
+            "total_cost": quantity * cost_price,
+            "section": section.lower(),
+            "created_at": datetime.utcnow().isoformat()
         }).execute()
 
 def deduct_stock(phone, item, quantity, section="general", is_retail=False):
@@ -430,3 +440,43 @@ def delete_stock_item(phone, item, section="general"):
         .ilike("item", item)\
         .eq("section", section.lower()).execute()
     return True
+
+def get_yearly_summary(phone, year=None):
+    from datetime import datetime
+    if not year:
+        year = datetime.utcnow().year
+    start = f"{year}-01-01T00:00:00"
+    end = f"{year}-12-31T23:59:59"
+    result = supabase.table("sales")\
+        .select("*").eq("phone", phone)\
+        .eq("archived", False)\
+        .gte("created_at", start)\
+        .lte("created_at", end).execute()
+    rows = result.data
+    return {
+        "revenue": sum(r["selling_price"] * r["quantity"] for r in rows),
+        "profit": sum(r["profit"] for r in rows),
+        "count": len(rows),
+        "year": year
+    }
+
+def get_restock_history(phone, section=None, limit=20):
+    """Get all stock purchase history."""
+    query = supabase.table("stock_history")\
+        .select("*").eq("phone", phone)\
+        .order("created_at", desc=True).limit(limit)
+    if section:
+        query = query.eq("section", section.lower())
+    return query.execute().data
+
+
+def get_restock_by_date(phone, date_str):
+    """Get restock records for a specific date."""
+    start = f"{date_str}T00:00:00"
+    end = f"{date_str}T23:59:59"
+    result = supabase.table("stock_history")\
+        .select("*").eq("phone", phone)\
+        .gte("created_at", start)\
+        .lte("created_at", end)\
+        .order("created_at", desc=True).execute()
+    return result.data
