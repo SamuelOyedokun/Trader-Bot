@@ -653,7 +653,7 @@ def handle_message(phone: str, text: str):
                 f"Send 'show my stock' to confirm."
             )         
 
-# ─── YEARLY SUMMARY ──────────────────────────────────
+        # ─── YEARLY SUMMARY ──────────────────────────────────
         elif intent == "view_yearly":
             year = datetime.now().year
             if parsed.get("start_date"):
