@@ -27,29 +27,52 @@ def verify_webhook():
     return "Forbidden", 403
 
 
-# Twilio calls this every time a user sends a message
+# Meta calls this every time a user sends a message
 @app.route("/webhook", methods=["POST"])
 def receive_message():
     try:
         print("=== WEBHOOK HIT ===")
-        print("Form data:", request.form)
-        print("Raw data:", request.data)
+        data = request.get_json()
+        print("Payload:", data)
 
-        phone_number = request.form.get("From", "").replace("whatsapp:+", "")
-        text = request.form.get("Body", "")
+        # Meta sends data in this nested structure
+        entry = data.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
 
-        print(f"Phone: {phone_number}")
+        # Ignore status updates (delivered, read, sent) — only handle messages
+        if "statuses" in value:
+            return "OK", 200
+
+        messages = value.get("messages", [])
+        if not messages:
+            return "OK", 200
+
+        message = messages[0]
+        msg_type = message.get("type")
+
+        # Only handle text messages
+        if msg_type != "text":
+            print(f"Ignored non-text message type: {msg_type}")
+            return "OK", 200
+
+        phone = message.get("from", "")   # e.g. "2347032327482"
+        text = message.get("text", {}).get("body", "").strip()
+
+        print(f"Phone: {phone}")
         print(f"Text: {text}")
 
-        if phone_number and text:
-            handle_message(phone_number, text)
+        if phone and text:
+            handle_message(phone, text)
         else:
             print("No phone or text found")
+
     except Exception as e:
         import traceback
         print(f"Error: {e}")
         traceback.print_exc()
-    return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, {'Content-Type': 'text/xml'}
+
+    return "OK", 200
 
 
 # Health check endpoint

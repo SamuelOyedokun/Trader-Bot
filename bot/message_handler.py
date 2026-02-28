@@ -12,35 +12,59 @@ from bot.db import (save_sale, get_daily_summary, get_yesterday_summary,
                     save_unit_conversion, get_unit_conversion, get_all_unit_conversions,
                     get_all_sections_summary, get_section_summary)
 from bot.charts import generate_sales_chart, generate_top_products_chart, upload_chart
-from twilio.rest import Client
+import httpx
 import os
-import tempfile
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from bot.subscription import check_access, get_payment_message, get_expiry_warning, activate_subscription, MONTHLY_PRICE
 
 load_dotenv()
 
-
-def get_twilio_client():
-    return Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+META_API_URL = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
 
 
 def send_whatsapp_message(phone: str, message: str):
-    client = get_twilio_client()
-    client.messages.create(
-        from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER')}",
-        body=message,
-        to=f"whatsapp:+{phone}"
-    )
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": phone,
+        "type": "text",
+        "text": {"body": message}
+    }
+    response = httpx.post(META_API_URL, json=payload, headers=headers, timeout=15)
+    if response.status_code != 200:
+        print(f"Meta API error: {response.status_code} — {response.text}")
+    else:
+        print(f"Message sent to {phone}")
 
 
 def send_whatsapp_image(phone: str, image_buf, caption: str):
     try:
         image_url = upload_chart(image_buf)
         if image_url:
-            message = caption + f"\n\n📊 View chart: {image_url}"
-            send_whatsapp_message(phone, message)
+            # Send image with caption via Meta API
+            headers = {
+                "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": phone,
+                "type": "image",
+                "image": {
+                    "link": image_url,
+                    "caption": caption
+                }
+            }
+            response = httpx.post(META_API_URL, json=payload, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"Meta image send error: {response.text}")
+                send_whatsapp_message(phone, caption)
         else:
             send_whatsapp_message(phone, caption)
     except Exception as e:
@@ -56,6 +80,46 @@ def format_summary(title, summary):
         f"📦 Sales recorded: {summary['count']}\n\n"
         f"Keep it up! 🚀"
     )
+
+
+# ─── KEYWORD-BASED INTENT OVERRIDE ───────────────────────────────────────────
+# Fixes cases where AI misparses intent. Applied BEFORE AI result is used.
+def override_intent(text: str, parsed: dict) -> dict:
+    """
+    Applies keyword-based corrections on top of AI-parsed intent.
+    This catches known misclassifications without changing the AI engine.
+    """
+    lower = text.lower().strip()
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # FIX 1: restock/buy keywords → route to restock intents, not view_stock
+    restock_keywords = ["restock", "i buy", "i bought", "what did i buy", "what i buy", "what i restock", "what did i restock"]
+    if any(kw in lower for kw in restock_keywords):
+        if "today" in lower:
+            parsed["start_date"] = today
+            parsed["intent"] = "view_restock_by_date"
+        elif "yesterday" in lower:
+            parsed["start_date"] = yesterday
+            parsed["intent"] = "view_restock_by_date"
+        elif parsed.get("start_date"):
+            parsed["intent"] = "view_restock_by_date"
+        else:
+            parsed["intent"] = "view_restock_history"
+
+    # FIX 2: "restock history" → always view_restock_history
+    if "restock history" in lower:
+        parsed["intent"] = "view_restock_history"
+
+    # FIX 3: "show" alone → give helpful prompt
+    if lower == "show":
+        parsed["intent"] = "unknown_show"
+
+    # FIX 4: "profit" alone → default to today's summary (view_daily is correct)
+    if lower == "profit":
+        parsed["intent"] = "view_daily"
+
+    return parsed
 
 
 def handle_message(phone: str, text: str):
@@ -97,8 +161,12 @@ def handle_message(phone: str, text: str):
 
         parsed = understand_message(text)
         print(f"PARSED: {parsed}")
+
+        # ─── APPLY INTENT OVERRIDES ──────────────────────────
+        parsed = override_intent(text, parsed)
+
         intent = parsed.get("intent")
-        print(f"INTENT: {intent}")
+        print(f"INTENT (after override): {intent}")
 
         # Get active section for every message
         mentioned_section = parsed.get("section")
@@ -135,7 +203,6 @@ def handle_message(phone: str, text: str):
                     )
 
                 elif amount and not cost:
-                    # Try to look up cost price from stock records
                     stock_result = get_all_stock(phone, active_section)
                     stock_map = {s["item"].lower(): s["cost_price"] for s in stock_result}
                     cost = stock_map.get(item.lower(), 0)
@@ -260,7 +327,6 @@ def handle_message(phone: str, text: str):
             customer = parsed.get("customer_name")
             amount = parsed.get("amount")
 
-            # Handle "pay everything" case
             if not amount and customer:
                 debts = get_customer_debt(phone, customer)
                 if debts:
@@ -461,7 +527,30 @@ def handle_message(phone: str, text: str):
             summary = get_weekly_summary(phone)
             send_whatsapp_message(phone, format_summary("This Week's Summary", summary))
 
+        # ─── MONTHLY SUMMARY — FIX: HONOUR SPECIFIC MONTH/YEAR ──────────────
         elif intent == "view_monthly":
+            start = parsed.get("start_date")
+            end = parsed.get("end_date")
+
+            if start and end:
+                try:
+                    start_dt = datetime.strptime(start, "%Y-%m-%d")
+                    end_dt = datetime.strptime(end, "%Y-%m-%d")
+                    now = datetime.now()
+                    # Detect if this is NOT the default "last 30 days" range
+                    is_default_range = (
+                        abs((now - end_dt).days) <= 1 and
+                        abs((end_dt - start_dt).days - 30) <= 2
+                    )
+                    if not is_default_range:
+                        summary = get_summary_by_range(phone, start, end)
+                        month_label = start_dt.strftime("%B %Y")
+                        send_whatsapp_message(phone, format_summary(f"{month_label} Summary", summary))
+                        return
+                except Exception:
+                    pass
+
+            # Default: current month
             summary = get_monthly_summary(phone)
             send_whatsapp_message(phone, format_summary("This Month's Summary", summary))
 
@@ -576,7 +665,7 @@ def handle_message(phone: str, text: str):
             else:
                 send_whatsapp_message(phone, get_payment_message(phone))
 
-       # ─── CORRECT STOCK ───────────────────────────────────
+        # ─── CORRECT STOCK ───────────────────────────────────
         elif intent == "correct_stock":
             items = parsed.get("items", [])
             if not items:
@@ -651,7 +740,7 @@ def handle_message(phone: str, text: str):
             send_whatsapp_message(phone,
                 f"🗑️ {item} deleted from stock!\n\n"
                 f"Send 'show my stock' to confirm."
-            )         
+            )
 
         # ─── YEARLY SUMMARY ──────────────────────────────────
         elif intent == "view_yearly":
@@ -728,6 +817,18 @@ def handle_message(phone: str, text: str):
                 f"🏪 Stock management\n"
                 f"📐 Unit breakdown (bags → mudus)\n\n"
                 f"Say 'switch to food' or 'switch to drinks' to change section! 😊"
+            )
+
+        # ─── "SHOW" WITH NO CONTEXT ───────────────────────────
+        elif intent == "unknown_show":
+            send_whatsapp_message(phone,
+                "What do you want to see? 😊\n\n"
+                "Try:\n"
+                "• 'show my stock'\n"
+                "• 'show restock history'\n"
+                "• 'show top products'\n"
+                "• 'show my debts'\n"
+                "• 'show this month summary'"
             )
 
         # ─── UNKNOWN ─────────────────────────────────────────
