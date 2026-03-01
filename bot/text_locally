@@ -1,0 +1,138 @@
+"""
+Local Test Script — Bypasses Twilio completely.
+Patches send_whatsapp_message to print to terminal instead of sending via WhatsApp.
+
+Usage:
+    python test_local.py "this month summary"
+    python test_local.py "show restock history"
+    python test_local.py --all
+"""
+
+import sys
+import os
+
+# ── Add project root to path ──────────────────────────────────────────────────
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ── Patch Twilio BEFORE importing message_handler ────────────────────────────
+import bot.message_handler as handler
+
+_bot_response = []
+
+def mock_send_whatsapp_message(phone: str, message: str):
+    """Captures bot response instead of sending via Twilio."""
+    _bot_response.append(message)
+    print("\n" + "─" * 50)
+    print("🤖 BOT RESPONSE:")
+    print("─" * 50)
+    print(message)
+    print("─" * 50)
+
+def mock_send_whatsapp_image(phone: str, image_buf, caption: str):
+    """Captures image response instead of sending via Twilio."""
+    _bot_response.append(caption)
+    print("\n" + "─" * 50)
+    print("🤖 BOT RESPONSE (with image):")
+    print("─" * 50)
+    print(caption)
+    print("[📊 Chart would be attached here]")
+    print("─" * 50)
+
+# Patch the functions
+handler.send_whatsapp_message = mock_send_whatsapp_message
+handler.send_whatsapp_image = mock_send_whatsapp_image
+
+# ── Test phone number ─────────────────────────────────────────────────────────
+TEST_PHONE = "2347032327482"  # your phone number
+
+# ── All test messages ─────────────────────────────────────────────────────────
+ALL_MESSAGES = [
+    # Summaries
+    "this month summary",
+    "last month summary",
+    "this week summary",
+    "last week summary",
+    "yesterday sales",
+    "today sales",
+    "this year summary",
+
+    # Profit
+    "my profit today",
+    "my profit this week",
+    "profit",
+
+    # Date range
+    "sales from Feb 1 to Feb 27",
+    "summary from Jan 1 to Jan 31",
+    "revenue last 7 days",
+    "last 5 days summary",
+
+    # Specific dates
+    "what did I sell on Jan 15",
+    "sales on March 3",
+
+    # Restock
+    "show restock history",
+    "restock history this month",
+    "what did I restock today",
+    "what did I buy on Feb 27",
+    "what did I buy yesterday",
+
+    # Stock
+    "show my stock",
+
+    # Edge cases
+    "summary for March 2020",
+    "sales from Feb 30 to Feb 35",
+
+    # Robustness
+    "show",
+    "hi",
+    "asdkjhaksjdh",
+]
+
+def run_single(message: str):
+    """Run a single test message."""
+    _bot_response.clear()
+    print(f"\n{'═' * 50}")
+    print(f"📤 MESSAGE: \"{message}\"")
+    handler.handle_message(TEST_PHONE, message)
+    if not _bot_response:
+        print("⚠️  No response captured (bot may have crashed)")
+
+def run_all():
+    """Run all test messages."""
+    print(f"\n🚀 Running {len(ALL_MESSAGES)} test messages...\n")
+    passed = 0
+    failed = 0
+    for msg in ALL_MESSAGES:
+        _bot_response.clear()
+        print(f"\n{'═' * 50}")
+        print(f"📤 MESSAGE: \"{msg}\"")
+        try:
+            handler.handle_message(TEST_PHONE, msg)
+            if _bot_response:
+                passed += 1
+            else:
+                print("⚠️  No response captured")
+                failed += 1
+        except Exception as e:
+            print(f"❌ ERROR: {e}")
+            failed += 1
+
+    print(f"\n{'═' * 50}")
+    print(f"✅ Passed: {passed} | ❌ Failed: {failed} | Total: {len(ALL_MESSAGES)}")
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print('  python test_local.py "your message here"')
+        print('  python test_local.py --all')
+        sys.exit(1)
+
+    if sys.argv[1] == "--all":
+        run_all()
+    else:
+        message = " ".join(sys.argv[1:])
+        run_single(message)
