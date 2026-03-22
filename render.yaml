@@ -4,10 +4,3 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
-```
-
----
-
-**Then on Render** → go to your existing Trader-Bot service → Environment Variables → **Add one new variable:**
-```
-TELEGRAM_TOKEN = 8548423496:AAE3ufIBWT8cn2HpCoRtM-_GLlB_SuV1wXg
