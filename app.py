@@ -10,7 +10,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # ── Your existing bot modules (unchanged) ──
 from bot.message_handler import handle_message as process_message
-from bot.db import get_or_create_user
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -31,7 +30,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     # Use phone-like ID for Supabase compatibility with existing schema
     phone = f"tg_{user.id}"
-    get_or_create_user(phone)
 
     welcome = (
         f"👋 Welcome to SOT TraderBot, {user.first_name}!\n\n"
